@@ -28,7 +28,7 @@ WINDOWS_CUDA_13 = PlatformSpec(
     key="win-x64-cuda13",
     executable="llama-mtmd-cli.exe",
     asset_patterns=(
-        "llama-*-bin-win-cuda-13-x64.zip",
+        "llama-*-bin-win-cuda-13*-x64.zip",
         "cudart-llama-bin-win-cuda-13.1-x64.zip",
     ),
 )

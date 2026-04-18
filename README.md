@@ -53,9 +53,12 @@ Windows x64 + CUDA 13
 The node downloads both release archives:
 
 ```text
-llama-*-bin-win-cuda-13-x64.zip
+llama-*-bin-win-cuda-13*-x64.zip
 cudart-llama-bin-win-cuda-13.1-x64.zip
 ```
+
+Recent llama.cpp releases may name the main Windows CUDA 13 binary with the
+exact CUDA runtime version, for example `llama-b8838-bin-win-cuda-13.1-x64.zip`.
 
 They are extracted into:
 
