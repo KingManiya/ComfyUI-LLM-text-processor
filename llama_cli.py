@@ -68,17 +68,6 @@ def _split_extra_args(extra_args: str) -> list[str]:
     return [part.strip("\"'") for part in parts]
 
 
-def normalize_seed(seed: int) -> int:
-    # llama.cpp uses -1 as "random seed"; otherwise Windows builds parse the
-    # value as an unsigned 32-bit integer.
-    seed = int(seed)
-    if seed == -1:
-        return -1
-    if not 0 <= seed <= MAX_LLAMA_SEED:
-        raise ValueError(f"seed must be -1 or between 0 and {MAX_LLAMA_SEED}")
-    return seed
-
-
 def build_command(
     cli_path: Path,
     model_path: Path,
@@ -111,7 +100,7 @@ def build_command(
         "--top-k", str(top_k),
         "--repeat-penalty", str(repeat_penalty),
         "-c", str(ctx_size),
-        "--seed", str(normalize_seed(seed)),
+        "--seed", str(seed),
     ]
 
     # In auto mode llama.cpp receives neither flag and uses its own placement
