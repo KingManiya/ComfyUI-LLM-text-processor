@@ -44,6 +44,14 @@ def tensor_to_temp_png(image) -> Path:
     return Path(path)
 
 
+def _write_temp_text_file(prefix: str, text: str) -> Path:
+    fd, path = tempfile.mkstemp(prefix=prefix, suffix=".txt")
+    os.close(fd)
+    text_path = Path(path)
+    text_path.write_text(text, encoding="utf-8", newline="\n")
+    return text_path
+
+
 def _write_prompt_file(system_prompt: str, prompt: str, enable_thinking: bool) -> Path:
     # Qwen chat templates understand these control tokens across llama.cpp builds
     # more reliably than version-specific template kwargs.
@@ -54,21 +62,7 @@ def _write_prompt_file(system_prompt: str, prompt: str, enable_thinking: bool) -
     chunks.append(think_prefix)
     chunks.append(prompt.strip())
 
-    fd, path = tempfile.mkstemp(prefix="qwen-gguf-prompt-", suffix=".txt")
-    os.close(fd)
-    prompt_path = Path(path)
-    prompt_path.write_text("\n\n".join(chunks), encoding="utf-8", newline="\n")
-    return prompt_path
-
-
-def _write_system_prompt_file(system_prompt: str) -> Path | None:
-    if not system_prompt:
-        return None
-    fd, path = tempfile.mkstemp(prefix="qwen-gguf-system-", suffix=".txt")
-    os.close(fd)
-    system_prompt_path = Path(path)
-    system_prompt_path.write_text(system_prompt.strip(), encoding="utf-8", newline="\n")
-    return system_prompt_path
+    return _write_temp_text_file("qwen-gguf-prompt-", "\n\n".join(chunks))
 
 
 def _split_extra_args(extra_args: str) -> list[str]:
@@ -106,9 +100,6 @@ def build_command(
     n_cpu_moe_layers: int,
     seed: int,
     text_only: bool,
-    prompt: str,
-    system_prompt_path: Path | None,
-    enable_thinking: bool,
     extra_args: str = "",
 ) -> list[str]:
     if memory_mode not in MEMORY_MODES:
@@ -139,14 +130,9 @@ def build_command(
         command.extend([
             "--jinja",
             "--single-turn",
-            "--reasoning", "on" if enable_thinking else "off",
-            "-p", prompt.strip(),
             "--no-display-prompt",
         ])
-        if system_prompt_path is not None:
-            command.extend(["-sysf", str(system_prompt_path)])
-    else:
-        command.extend(["-f", str(prompt_path)])
+    command.extend(["-f", str(prompt_path)])
 
     if mmproj_path is not None:
         command.extend(["--mmproj", str(mmproj_path)])
@@ -180,7 +166,6 @@ def run_llama_cli(
 ) -> tuple[str, str]:
     image_path = None
     prompt_path = None
-    system_prompt_path = None
     process = None
     try:
         effective_mmproj_path = None
@@ -194,10 +179,7 @@ def run_llama_cli(
             text_only = False
             image_path = tensor_to_temp_png(image)
 
-        if text_only:
-            system_prompt_path = _write_system_prompt_file(system_prompt)
-        else:
-            prompt_path = _write_prompt_file(system_prompt, prompt, enable_thinking)
+        prompt_path = _write_prompt_file(system_prompt, prompt, enable_thinking)
 
         command = build_command(
             cli_path=effective_cli_path,
@@ -216,9 +198,6 @@ def run_llama_cli(
             n_cpu_moe_layers=n_cpu_moe_layers,
             seed=seed,
             text_only=text_only,
-            prompt=prompt,
-            system_prompt_path=system_prompt_path,
-            enable_thinking=enable_thinking,
             extra_args=extra_args,
         )
 
@@ -243,7 +222,7 @@ def run_llama_cli(
     finally:
         # Temp prompt/image files can be large in workflows that run many times,
         # so cleanup happens even when llama.cpp exits with an error.
-        for path in (image_path, prompt_path, system_prompt_path):
+        for path in (image_path, prompt_path):
             if path is not None and path.exists():
                 path.unlink()
 
