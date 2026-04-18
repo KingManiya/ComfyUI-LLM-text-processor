@@ -9,6 +9,7 @@ from pathlib import Path
 
 
 THINK_BLOCK_RE = re.compile(r"<think[^>]*>.*?</think>", flags=re.IGNORECASE | re.DOTALL)
+LLAMA_PERF_PREFIX = "llama_perf_context_print:"
 MAX_LLAMA_SEED = 2**32 - 1
 MEMORY_MODES = (
     "auto",
@@ -141,7 +142,7 @@ def run_llama_cli(
     enable_thinking: bool,
     timeout_seconds: int,
     extra_args: str = "",
-) -> str:
+) -> tuple[str, str]:
     image_path = None
     prompt_path = None
     try:
@@ -151,6 +152,7 @@ def run_llama_cli(
             image_path = tensor_to_temp_png(image)
 
         prompt_path = _write_prompt_file(system_prompt, prompt, enable_thinking)
+
         command = build_command(
             cli_path=cli_path,
             model_path=model_path,
@@ -170,7 +172,6 @@ def run_llama_cli(
             extra_args=extra_args,
         )
 
-        print(f"[Qwen GGUF] Running llama.cpp: {model_path.name}")
         result = subprocess.run(
             command,
             capture_output=True,
@@ -192,7 +193,16 @@ def run_llama_cli(
         raise RuntimeError(
             f"llama.cpp inference failed with exit code {result.returncode}:\n{stderr[-2000:]}"
         )
-    return result.stdout
+    perf = extract_perf(result.stderr)
+    return result.stdout, perf
+
+
+def extract_perf(stderr: str) -> str:
+    lines = [
+        line.strip() for line in str(stderr or "").splitlines()
+        if LLAMA_PERF_PREFIX in line
+    ]
+    return "\n".join(lines)
 
 
 def extract_thinking(text: str, enable_thinking: bool) -> tuple[str, str]:
@@ -217,4 +227,6 @@ def extract_thinking(text: str, enable_thinking: bool) -> tuple[str, str]:
     for token in ("<|im_end|>", "<|im_start|>", "<|endoftext|>"):
         text = text.replace(token, "")
 
-    return text.strip(), thinking if enable_thinking else ""
+    response = text.strip()
+    thinking = thinking if enable_thinking else ""
+    return response, thinking

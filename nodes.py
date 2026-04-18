@@ -122,11 +122,12 @@ class QwenGGUF:
             },
         }
 
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("RESPONSE", "THINKING")
+    RETURN_TYPES = ("STRING", "STRING", "STRING")
+    RETURN_NAMES = ("RESPONSE", "THINKING", "PERF")
     OUTPUT_TOOLTIPS = (
         "Final model response with Qwen thinking blocks removed.",
         "Extracted <think> reasoning when thinking mode is enabled.",
+        "llama.cpp llama_perf_context_print lines.",
     )
     FUNCTION = "generate"
     CATEGORY = "Qwen/GGUF"
@@ -161,7 +162,7 @@ class QwenGGUF:
         # workflows do not touch the network until this node actually runs.
         cli_path = ensure_llama_cli()
 
-        raw_output = run_llama_cli(
+        raw_output, perf = run_llama_cli(
             cli_path=cli_path,
             model_path=model_path,
             mmproj_path=mmproj_path,
@@ -183,7 +184,7 @@ class QwenGGUF:
             extra_args=extra_args,
         )
         response, thinking = extract_thinking(raw_output, enable_thinking)
-        return (response, thinking)
+        return (response, thinking, perf)
 
 
 NODE_CLASS_MAPPINGS = {"QwenGGUF": QwenGGUF}
