@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import re
 import shlex
-import signal
 import subprocess
 import tempfile
 import time
@@ -11,9 +10,14 @@ from pathlib import Path
 
 import comfy.model_management
 
+from .llama_binary import LlamaCliPaths
+
 
 THINK_BLOCK_RE = re.compile(r"<think[^>]*>.*?</think>", flags=re.IGNORECASE | re.DOTALL)
-LLAMA_PERF_PREFIX = "llama_perf_context_print:"
+LLAMA_PERF_PREFIXES = (
+    "llama_perf_context_print:",
+    "common_perf_print:",
+)
 MAX_LLAMA_SEED = 2**32 - 1
 INTERRUPT_POLL_SECONDS = 0.1
 MEMORY_MODES = (
@@ -57,6 +61,16 @@ def _write_prompt_file(system_prompt: str, prompt: str, enable_thinking: bool) -
     return prompt_path
 
 
+def _write_system_prompt_file(system_prompt: str) -> Path | None:
+    if not system_prompt:
+        return None
+    fd, path = tempfile.mkstemp(prefix="qwen-gguf-system-", suffix=".txt")
+    os.close(fd)
+    system_prompt_path = Path(path)
+    system_prompt_path.write_text(system_prompt.strip(), encoding="utf-8", newline="\n")
+    return system_prompt_path
+
+
 def _split_extra_args(extra_args: str) -> list[str]:
     if not extra_args or not extra_args.strip():
         return []
@@ -91,6 +105,10 @@ def build_command(
     n_gpu_layers: int,
     n_cpu_moe_layers: int,
     seed: int,
+    text_only: bool,
+    prompt: str,
+    system_prompt_path: Path | None,
+    enable_thinking: bool,
     extra_args: str = "",
 ) -> list[str]:
     if memory_mode not in MEMORY_MODES:
@@ -101,7 +119,6 @@ def build_command(
     command = [
         str(cli_path),
         "-m", str(model_path),
-        "-f", str(prompt_path),
         "-n", str(max_tokens),
         "--temp", str(temperature),
         "--top-p", str(top_p),
@@ -118,6 +135,19 @@ def build_command(
     if memory_mode in {"cpu_moe_layers", "gpu_and_cpu_moe_layers"}:
         command.extend(["--n-cpu-moe", str(n_cpu_moe_layers)])
 
+    if text_only:
+        command.extend([
+            "--jinja",
+            "--single-turn",
+            "--reasoning", "on" if enable_thinking else "off",
+            "-p", prompt.strip(),
+            "--no-display-prompt",
+        ])
+        if system_prompt_path is not None:
+            command.extend(["-sysf", str(system_prompt_path)])
+    else:
+        command.extend(["-f", str(prompt_path)])
+
     if mmproj_path is not None:
         command.extend(["--mmproj", str(mmproj_path)])
     if image_path is not None:
@@ -128,7 +158,7 @@ def build_command(
 
 
 def run_llama_cli(
-    cli_path: Path,
+    cli_paths: LlamaCliPaths,
     model_path: Path,
     mmproj_path: Path | None,
     image,
@@ -150,19 +180,29 @@ def run_llama_cli(
 ) -> tuple[str, str]:
     image_path = None
     prompt_path = None
+    system_prompt_path = None
     process = None
     try:
+        effective_mmproj_path = None
+        effective_cli_path = cli_paths.text
+        text_only = True
         if image is not None:
             if mmproj_path is None:
                 raise ValueError("Image input requires a selected mmproj GGUF file.")
+            effective_cli_path = cli_paths.multimodal
+            effective_mmproj_path = mmproj_path
+            text_only = False
             image_path = tensor_to_temp_png(image)
 
-        prompt_path = _write_prompt_file(system_prompt, prompt, enable_thinking)
+        if text_only:
+            system_prompt_path = _write_system_prompt_file(system_prompt)
+        else:
+            prompt_path = _write_prompt_file(system_prompt, prompt, enable_thinking)
 
         command = build_command(
-            cli_path=cli_path,
+            cli_path=effective_cli_path,
             model_path=model_path,
-            mmproj_path=mmproj_path,
+            mmproj_path=effective_mmproj_path,
             image_path=image_path,
             prompt_path=prompt_path,
             max_tokens=max_tokens,
@@ -175,20 +215,26 @@ def run_llama_cli(
             n_gpu_layers=n_gpu_layers,
             n_cpu_moe_layers=n_cpu_moe_layers,
             seed=seed,
+            text_only=text_only,
+            prompt=prompt,
+            system_prompt_path=system_prompt_path,
+            enable_thinking=enable_thinking,
             extra_args=extra_args,
         )
 
         process = subprocess.Popen(
             command,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             encoding="utf-8",
             errors="replace",
             shell=False,
-            creationflags=_subprocess_creationflags(),
         )
         stdout, stderr = _communicate_with_interrupt(process, timeout_seconds)
+        print(stdout)
+        print(stderr)
         result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
     except BaseException:
         if process is not None:
@@ -197,7 +243,7 @@ def run_llama_cli(
     finally:
         # Temp prompt/image files can be large in workflows that run many times,
         # so cleanup happens even when llama.cpp exits with an error.
-        for path in (image_path, prompt_path):
+        for path in (image_path, prompt_path, system_prompt_path):
             if path is not None and path.exists():
                 path.unlink()
 
@@ -213,13 +259,7 @@ def run_llama_cli(
 def _stop_process(process: subprocess.Popen) -> None:
     if process.poll() is not None:
         return
-    if os.name == "nt":
-        try:
-            process.send_signal(signal.CTRL_BREAK_EVENT)
-        except (OSError, ValueError):
-            process.terminate()
-    else:
-        process.terminate()
+    process.terminate()
     try:
         process.wait(timeout=3)
     except subprocess.TimeoutExpired:
@@ -245,16 +285,10 @@ def _communicate_with_interrupt(process: subprocess.Popen, timeout_seconds: int)
             continue
 
 
-def _subprocess_creationflags() -> int:
-    if os.name != "nt":
-        return 0
-    return getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-
-
 def extract_perf(stderr: str) -> str:
     lines = [
         line.strip() for line in str(stderr or "").splitlines()
-        if LLAMA_PERF_PREFIX in line
+        if any(prefix in line for prefix in LLAMA_PERF_PREFIXES)
     ]
     return "\n".join(lines)
 

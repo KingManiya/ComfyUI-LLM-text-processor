@@ -154,8 +154,9 @@ For image workflows, connect an `IMAGE` input and choose the matching `mmproj`
 file. The node saves the first image in the batch as a temporary PNG and passes
 it to llama.cpp with `--image`.
 
-If no image is connected, `mmproj` can stay set to `none`. You may still select a
-projector manually if you want llama.cpp to receive `--mmproj`.
+If no image is connected, the node runs through `llama-completion` as text-only
+and does not pass `--mmproj`, even when a projector is selected in the dropdown.
+Image workflows run through `llama-mtmd-cli`, where `--mmproj` is required.
 
 ## Troubleshooting
 

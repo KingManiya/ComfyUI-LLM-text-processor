@@ -19,19 +19,28 @@ VENDOR_ROOT = PACKAGE_ROOT / "vendor" / "llama.cpp"
 @dataclass(frozen=True)
 class PlatformSpec:
     key: str
-    executable: str
+    text_executable: str
+    multimodal_executable: str
     asset_patterns: tuple[str, ...]
     required_files: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class LlamaCliPaths:
+    text: Path
+    multimodal: Path
+
+
 WINDOWS_CUDA_13 = PlatformSpec(
     key="win-x64-cuda13",
-    executable="llama-mtmd-cli.exe",
+    text_executable="llama-completion.exe",
+    multimodal_executable="llama-mtmd-cli.exe",
     asset_patterns=(
         "llama-*-bin-win-cuda-13*-x64.zip",
         "cudart-llama-bin-win-cuda-13*-x64.zip",
     ),
     required_files=(
+        "llama-completion.exe",
         "llama-mtmd-cli.exe",
         "ggml-cuda.dll",
         "cudart64_13.dll",
@@ -84,11 +93,19 @@ def _select_assets(release: dict, spec: PlatformSpec) -> list[dict]:
     return selected
 
 
-def _find_executable(install_dir: Path, spec: PlatformSpec) -> Path | None:
-    for path in install_dir.rglob(spec.executable):
+def _find_file(install_dir: Path, name: str) -> Path | None:
+    for path in install_dir.rglob(name):
         if path.is_file():
             return path
     return None
+
+
+def _find_cli_paths(install_dir: Path, spec: PlatformSpec) -> LlamaCliPaths | None:
+    text = _find_file(install_dir, spec.text_executable)
+    multimodal = _find_file(install_dir, spec.multimodal_executable)
+    if text is None or multimodal is None:
+        return None
+    return LlamaCliPaths(text=text, multimodal=multimodal)
 
 
 def _has_required_files(install_dir: Path, spec: PlatformSpec) -> bool:
@@ -99,15 +116,15 @@ def _has_required_files(install_dir: Path, spec: PlatformSpec) -> bool:
 
 
 def _is_complete_install(install_dir: Path, spec: PlatformSpec) -> bool:
-    return _find_executable(install_dir, spec) is not None and _has_required_files(install_dir, spec)
+    return _find_cli_paths(install_dir, spec) is not None and _has_required_files(install_dir, spec)
 
 
-def _existing_install(spec: PlatformSpec) -> Path | None:
+def _existing_install(spec: PlatformSpec) -> LlamaCliPaths | None:
     if not VENDOR_ROOT.exists():
         return None
     for install_dir in VENDOR_ROOT.glob(f"*/{spec.key}"):
         if _is_complete_install(install_dir, spec):
-            return _find_executable(install_dir, spec)
+            return _find_cli_paths(install_dir, spec)
     return None
 
 
@@ -122,7 +139,7 @@ def _extract_assets(assets: list[dict], install_dir: Path) -> None:
                 archive.extractall(install_dir)
 
 
-def ensure_llama_cli() -> Path:
+def ensure_llama_cli_paths() -> LlamaCliPaths:
     spec = _platform_spec()
     existing = _existing_install(spec)
     if existing is not None:
@@ -133,19 +150,19 @@ def ensure_llama_cli() -> Path:
     install_dir = VENDOR_ROOT / tag / spec.key
 
     if _is_complete_install(install_dir, spec):
-        executable = _find_executable(install_dir, spec)
-        if executable is None:
-            raise RuntimeError(f"Completed install has no {spec.executable}: {install_dir}")
-        return executable
+        paths = _find_cli_paths(install_dir, spec)
+        if paths is None:
+            raise RuntimeError(f"Completed install has incomplete CLI executables: {install_dir}")
+        return paths
 
     assets = _select_assets(release, spec)
     install_dir.mkdir(parents=True, exist_ok=True)
     _extract_assets(assets, install_dir)
 
-    executable = _find_executable(install_dir, spec)
-    if executable is None:
+    paths = _find_cli_paths(install_dir, spec)
+    if paths is None:
         raise RuntimeError(
-            f"Downloaded llama.cpp assets but could not find {spec.executable} in {install_dir}"
+            f"Downloaded llama.cpp assets but could not find CLI executables in {install_dir}"
         )
     if not _has_required_files(install_dir, spec):
         missing = [
@@ -154,4 +171,4 @@ def ensure_llama_cli() -> Path:
         ]
         raise RuntimeError(f"Downloaded llama.cpp assets are incomplete; missing: {', '.join(missing)}")
 
-    return executable
+    return paths

@@ -9,7 +9,7 @@ from .folder_registry import (
     model_options,
     system_prompt_options,
 )
-from .llama_binary import ensure_llama_cli
+from .llama_binary import ensure_llama_cli_paths
 from .llama_cli import MAX_LLAMA_SEED, MEMORY_MODES, extract_thinking, run_llama_cli
 
 
@@ -160,10 +160,10 @@ class QwenGGUF:
 
         # Binary installation is lazy so ComfyUI startup stays fast and offline
         # workflows do not touch the network until this node actually runs.
-        cli_path = ensure_llama_cli()
+        cli_paths = ensure_llama_cli_paths()
 
         raw_output, perf = run_llama_cli(
-            cli_path=cli_path,
+            cli_paths=cli_paths,
             model_path=model_path,
             mmproj_path=mmproj_path,
             image=image,
