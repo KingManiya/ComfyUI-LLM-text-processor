@@ -10,7 +10,7 @@ from .folder_registry import (
     system_prompt_options,
 )
 from .llama_binary import ensure_llama_cli_paths
-from .llama_cli import MAX_LLAMA_SEED, MEMORY_MODES, extract_thinking, run_llama_cli
+from .llama_cli import MAX_LLAMA_SEED, MEMORY_MODES, run_llama_cli
 
 
 class QwenGGUF:
@@ -99,10 +99,6 @@ class QwenGGUF:
                     "max": MAX_LLAMA_SEED,
                     "tooltip": "Random seed used by llama.cpp. Use -1 for a random seed.",
                 }),
-                "enable_thinking": ("BOOLEAN", {
-                    "default": False,
-                    "tooltip": "Use /think and return extracted reasoning in the THINKING output.",
-                }),
                 "timeout_seconds": ("INT", {
                     "default": 300,
                     "min": 10,
@@ -126,7 +122,7 @@ class QwenGGUF:
     RETURN_NAMES = ("RESPONSE", "THINKING", "PERF")
     OUTPUT_TOOLTIPS = (
         "Final model response with Qwen thinking blocks removed.",
-        "Extracted <think> reasoning when thinking mode is enabled.",
+        "Extracted <think> reasoning when present in model output.",
         "llama.cpp llama_perf_context_print lines.",
     )
     FUNCTION = "generate"
@@ -149,7 +145,6 @@ class QwenGGUF:
         n_gpu_layers: int,
         n_cpu_moe_layers: int,
         seed: int,
-        enable_thinking: bool,
         timeout_seconds: int,
         image=None,
         extra_args: str = "",
@@ -162,7 +157,7 @@ class QwenGGUF:
         # workflows do not touch the network until this node actually runs.
         cli_paths = ensure_llama_cli_paths()
 
-        raw_output, perf = run_llama_cli(
+        response, thinking, perf = run_llama_cli(
             cli_paths=cli_paths,
             model_path=model_path,
             mmproj_path=mmproj_path,
@@ -179,11 +174,9 @@ class QwenGGUF:
             n_gpu_layers=n_gpu_layers,
             n_cpu_moe_layers=n_cpu_moe_layers,
             seed=seed,
-            enable_thinking=enable_thinking,
             timeout_seconds=timeout_seconds,
             extra_args=extra_args,
         )
-        response, thinking = extract_thinking(raw_output, enable_thinking)
         return (response, thinking, perf)
 
 

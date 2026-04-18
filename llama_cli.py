@@ -52,14 +52,10 @@ def _write_temp_text_file(prefix: str, text: str) -> Path:
     return text_path
 
 
-def _write_prompt_file(system_prompt: str, prompt: str, enable_thinking: bool) -> Path:
-    # Qwen chat templates understand these control tokens across llama.cpp builds
-    # more reliably than version-specific template kwargs.
-    think_prefix = "/think" if enable_thinking else "/no_think"
+def _write_prompt_file(system_prompt: str, prompt: str) -> Path:
     chunks = []
     if system_prompt:
         chunks.append(system_prompt.strip())
-    chunks.append(think_prefix)
     chunks.append(prompt.strip())
 
     return _write_temp_text_file("qwen-gguf-prompt-", "\n\n".join(chunks))
@@ -99,7 +95,6 @@ def build_command(
     n_gpu_layers: int,
     n_cpu_moe_layers: int,
     seed: int,
-    text_only: bool,
     extra_args: str = "",
 ) -> list[str]:
     if memory_mode not in MEMORY_MODES:
@@ -126,12 +121,6 @@ def build_command(
     if memory_mode in {"cpu_moe_layers", "gpu_and_cpu_moe_layers"}:
         command.extend(["--n-cpu-moe", str(n_cpu_moe_layers)])
 
-    if text_only:
-        command.extend([
-            "--jinja",
-            "--single-turn",
-            "--no-display-prompt",
-        ])
     command.extend(["-f", str(prompt_path)])
 
     if mmproj_path is not None:
@@ -160,26 +149,23 @@ def run_llama_cli(
     n_gpu_layers: int,
     n_cpu_moe_layers: int,
     seed: int,
-    enable_thinking: bool,
     timeout_seconds: int,
     extra_args: str = "",
-) -> tuple[str, str]:
+) -> tuple[str, str, str]:
     image_path = None
     prompt_path = None
     process = None
     try:
         effective_mmproj_path = None
         effective_cli_path = cli_paths.text
-        text_only = True
         if image is not None:
             if mmproj_path is None:
                 raise ValueError("Image input requires a selected mmproj GGUF file.")
             effective_cli_path = cli_paths.multimodal
             effective_mmproj_path = mmproj_path
-            text_only = False
             image_path = tensor_to_temp_png(image)
 
-        prompt_path = _write_prompt_file(system_prompt, prompt, enable_thinking)
+        prompt_path = _write_prompt_file(system_prompt, prompt)
 
         command = build_command(
             cli_path=effective_cli_path,
@@ -197,7 +183,6 @@ def run_llama_cli(
             n_gpu_layers=n_gpu_layers,
             n_cpu_moe_layers=n_cpu_moe_layers,
             seed=seed,
-            text_only=text_only,
             extra_args=extra_args,
         )
 
@@ -231,8 +216,9 @@ def run_llama_cli(
         raise RuntimeError(
             f"llama.cpp inference failed with exit code {result.returncode}:\n{stderr[-2000:]}"
         )
+    response, thinking = extract_thinking(result.stdout)
     perf = extract_perf(result.stderr)
-    return result.stdout, perf
+    return response, thinking, perf
 
 
 def _stop_process(process: subprocess.Popen) -> None:
@@ -272,7 +258,7 @@ def extract_perf(stderr: str) -> str:
     return "\n".join(lines)
 
 
-def extract_thinking(text: str, enable_thinking: bool) -> tuple[str, str]:
+def extract_thinking(text: str) -> tuple[str, str]:
     text = str(text or "")
     thinking = ""
 
@@ -295,5 +281,4 @@ def extract_thinking(text: str, enable_thinking: bool) -> tuple[str, str]:
         text = text.replace(token, "")
 
     response = text.strip()
-    thinking = thinking if enable_thinking else ""
     return response, thinking

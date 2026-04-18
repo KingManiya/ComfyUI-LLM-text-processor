@@ -11,7 +11,6 @@ This node is intentionally small: it discovers local `.gguf` models from
 - Qwen text generation with GGUF models
 - Optional image input through llama.cpp multimodal support
 - Separate `RESPONSE` and `THINKING` outputs
-- `/think` and `/no_think` control for Qwen reasoning models
 - System prompt presets from text files
 - Recursive model discovery from `ComfyUI/models/LLM`
 - Automatic llama.cpp binary download for Windows x64 CUDA 13
@@ -131,7 +130,6 @@ Each top-level `.txt` file appears in the `system_prompt` dropdown. Choose
 | `n_gpu_layers` | Used in GPU layer modes. Passes `--gpu-layers` / `-ngl`. |
 | `n_cpu_moe_layers` | Used in CPU MoE modes. Passes `--n-cpu-moe`. |
 | `seed` | Random seed. Use `-1` for a random seed. |
-| `enable_thinking` | Uses `/think` when enabled and `/no_think` when disabled. |
 | `timeout_seconds` | Maximum runtime before the subprocess is stopped. |
 | `image` | Optional ComfyUI image input. Uses the first image in a batch. |
 | `extra_args` | Advanced llama.cpp CLI flags appended to the command. |
@@ -143,7 +141,7 @@ Every input includes an in-node tooltip.
 | Output | Description |
 | --- | --- |
 | `RESPONSE` | Final model response with Qwen thinking blocks removed. |
-| `THINKING` | Extracted `<think>...</think>` reasoning when thinking is enabled. |
+| `THINKING` | Extracted `<think>...</think>` reasoning when present in model output. |
 | `PERF` | llama.cpp `llama_perf_context_print` lines. |
 
 Both outputs include ComfyUI output tooltips.
