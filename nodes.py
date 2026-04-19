@@ -134,8 +134,8 @@ class QwenGGUF:
     RETURN_NAMES = ("RESPONSE", "THINKING", "PERF")
     OUTPUT_TOOLTIPS = (
         "Final model response with Qwen thinking blocks removed.",
-        "Extracted <think> reasoning when present in model output.",
-        "llama.cpp llama_perf_context_print lines.",
+        "Extracted reasoning when present in model output.",
+        "llama.cpp prompt and generation speed.",
     )
     FUNCTION = "generate"
     CATEGORY = "Qwen GGUF"

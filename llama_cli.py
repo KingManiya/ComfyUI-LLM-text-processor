@@ -13,11 +13,11 @@ import comfy.model_management
 from .llama_binary import ensure_llama_cli_paths
 
 
-THINK_BLOCK_RE = re.compile(r"<think[^>]*>.*?</think>", flags=re.IGNORECASE | re.DOTALL)
-LLAMA_PERF_PREFIXES = (
-    "llama_perf_context_print:",
-    "common_perf_print:",
-)
+PROMPT_ECHO_END = "... (truncated)"
+PROMPT_PADDING = " " * 501
+PERF_RE = re.compile(r"\[\s*Prompt:\s*[^|\]]+\|\s*Generation:\s*[^\]]+\]")
+START_THINKING = "[Start thinking]"
+END_THINKING = "[End thinking]"
 
 
 def tensor_to_temp_png(image) -> Path:
@@ -48,7 +48,7 @@ def _write_prompt_file(system_prompt: str, prompt: str) -> Path:
     chunks = []
     if system_prompt:
         chunks.append(system_prompt.strip())
-    chunks.append(prompt.strip())
+    chunks.append(prompt.strip() + PROMPT_PADDING)
 
     return _write_temp_text_file("qwen-gguf-prompt-", "\n\n".join(chunks))
 
@@ -160,9 +160,7 @@ def run_llama_cli(
         raise RuntimeError(
             f"llama.cpp inference failed with exit code {result.returncode}:\n{stderr}"
         )
-    response, thinking = _extract_thinking(result.stdout)
-    perf = _extract_perf(result.stderr)
-    return response, thinking, perf
+    return _parse_response(result.stdout + "\n" + result.stderr)
 
 
 def _stop_process(process: subprocess.Popen) -> None:
@@ -194,35 +192,21 @@ def _communicate_with_interrupt(process: subprocess.Popen, timeout_seconds: int)
             continue
 
 
-def _extract_perf(stderr: str) -> str:
-    lines = [
-        line.strip() for line in str(stderr or "").splitlines()
-        if any(prefix in line for prefix in LLAMA_PERF_PREFIXES)
-    ]
-    return "\n".join(lines)
-
-
-def _extract_thinking(text: str) -> tuple[str, str]:
+def _parse_response(text: str) -> tuple[str, str, str]:
     text = str(text or "")
-    thinking = ""
+    if PROMPT_ECHO_END in text:
+        text = text.split(PROMPT_ECHO_END, 1)[1]
 
-    # llama.cpp returns raw stdout; Qwen reasoning may appear as a full block,
-    # a closing-only block, or an unfinished block if generation is truncated.
-    match = THINK_BLOCK_RE.search(text)
-    if match:
-        thinking = re.sub(r"</?think[^>]*>", "", match.group(0), flags=re.IGNORECASE).strip()
-        text = THINK_BLOCK_RE.sub("", text).strip()
-    elif "</think>" in text:
-        before, after = text.split("</think>", 1)
-        thinking = before.strip()
-        text = after.strip()
-    elif "<think>" in text:
-        before, after = text.split("<think>", 1)
-        thinking = after.strip()
-        text = before.strip()
+    perf_match = PERF_RE.search(text)
+    perf = perf_match.group(0).strip() if perf_match else ""
+    content = text[:perf_match.start()] if perf_match else text
+    content = content.strip()
+    if not content.startswith(START_THINKING):
+        return content, "", perf
 
-    for token in ("<|im_end|>", "<|im_start|>", "<|endoftext|>", " [end of text]"):
-        text = text.replace(token, "")
+    thinking_text = content[len(START_THINKING):]
+    if END_THINKING not in thinking_text:
+        return "", thinking_text.strip(), perf
 
-    response = text.strip()
-    return response, thinking
+    thinking, response = thinking_text.split(END_THINKING, 1)
+    return response.strip(), thinking.strip(), perf

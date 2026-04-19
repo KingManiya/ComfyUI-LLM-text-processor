@@ -142,8 +142,8 @@ Every input includes an in-node tooltip.
 | Output | Description |
 | --- | --- |
 | `RESPONSE` | Final model response with Qwen thinking blocks removed. |
-| `THINKING` | Extracted `<think>...</think>` reasoning when present in model output. |
-| `PERF` | llama.cpp `llama_perf_context_print` lines. |
+| `THINKING` | Extracted reasoning when present in model output. |
+| `PERF` | Parsed llama.cpp prompt and generation speed, for example `[ Prompt: 80.0 t/s | Generation: 76.6 t/s ]`. |
 
 Both outputs include ComfyUI output tooltips.
 
