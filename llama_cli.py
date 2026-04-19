@@ -16,6 +16,10 @@ from .llama_binary import ensure_llama_cli_paths
 PROMPT_ECHO_END = "... (truncated)"
 PROMPT_PADDING = " " * 501
 PERF_RE = re.compile(r"\[\s*Prompt:\s*[^|\]]+\|\s*Generation:\s*[^\]]+\]")
+MMPROJ_EMBEDDING_MISMATCH_RE = re.compile(
+    r"mismatch between text model \(n_embd = (?P<model>\d+)\) and mmproj \(n_embd = (?P<mmproj>\d+)\)",
+    flags=re.IGNORECASE,
+)
 START_THINKING = "[Start thinking]"
 END_THINKING = "[End thinking]"
 
@@ -157,6 +161,9 @@ def run_llama_cli(
 
     if result.returncode != 0:
         stderr = result.stderr.strip()
+        message = _parse_llama_error(stderr)
+        if message:
+            raise RuntimeError(message)
         raise RuntimeError(
             f"llama.cpp inference failed with exit code {result.returncode}:\n{stderr}"
         )
@@ -210,3 +217,14 @@ def _parse_response(text: str) -> tuple[str, str, str]:
 
     thinking, response = thinking_text.split(END_THINKING, 1)
     return response.strip(), thinking.strip(), perf
+
+
+def _parse_llama_error(stderr: str) -> str:
+    match = MMPROJ_EMBEDDING_MISMATCH_RE.search(str(stderr or ""))
+    if not match:
+        return ""
+    return (
+        "Selected mmproj does not match the text model "
+        f"(model n_embd={match.group('model')}, mmproj n_embd={match.group('mmproj')}). "
+        "Choose the mmproj file that belongs to the selected GGUF model."
+    )
