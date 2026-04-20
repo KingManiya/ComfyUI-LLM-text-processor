@@ -10,6 +10,7 @@ from .folder_registry import (
     system_prompt_options,
 )
 from .llama_cli import (
+    MAX_LLAMA_SEED,
     build_command,
     run_llama_cli,
     split_extra_args,
@@ -104,7 +105,7 @@ class QwenGGUF:
                 "seed": ("INT", {
                     "default": 1,
                     "min": -1,
-                    "max": 2**32 - 1, # MAX_LLAMA_SEED
+                    "max": MAX_LLAMA_SEED,
                     "tooltip": "Random seed. Use -1 for a random seed.",
                 }),
                 "timeout_seconds": ("INT", {

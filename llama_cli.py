@@ -22,6 +22,9 @@ MMPROJ_EMBEDDING_MISMATCH_RE = re.compile(
 )
 START_THINKING = "[Start thinking]"
 END_THINKING = "[End thinking]"
+LLAMA_RANDOM_SEED = -1
+LLAMA_SEED_MODULUS = 2**32
+MAX_LLAMA_SEED = LLAMA_SEED_MODULUS - 1
 
 
 def tensor_to_temp_png(image) -> Path:
@@ -57,6 +60,15 @@ def split_extra_args(extra_args: str) -> list[str]:
         return []
     parts = shlex.split(extra_args, posix=(os.name != "nt"))
     return [part.strip("\"'") for part in parts]
+
+
+def normalize_llama_seed(seed: int) -> int:
+    seed = int(seed)
+    if seed == LLAMA_RANDOM_SEED:
+        return LLAMA_RANDOM_SEED
+    if 0 <= seed <= MAX_LLAMA_SEED:
+        return seed
+    return seed % LLAMA_SEED_MODULUS
 
 
 def build_command(
@@ -99,7 +111,7 @@ def build_command(
         "--top-k", str(top_k),
         "--repeat-penalty", str(repeat_penalty),
         "-c", str(ctx_size),
-        "--seed", str(seed),
+        "--seed", str(normalize_llama_seed(seed)),
         "--single-turn",
         "--reasoning", reasoning,
     ]
