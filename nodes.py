@@ -17,7 +17,7 @@ from .llama_cli import (
 )
 
 
-class QwenGGUF:
+class LLMTextProcessor:
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -36,7 +36,7 @@ class QwenGGUF:
                     "default": "Describe this image in detail.",
                     "multiline": True,
                     "dynamicPrompts": True,
-                    "tooltip": "User prompt sent to the Qwen model.",
+                    "tooltip": "User prompt sent to the selected model.",
                 }),
                 "max_tokens": ("INT", {
                     "default": 2048,
@@ -139,8 +139,8 @@ class QwenGGUF:
         "llama.cpp prompt and generation speed.",
     )
     FUNCTION = "generate"
-    CATEGORY = "Qwen GGUF"
-    TITLE = "Qwen GGUF (llama.cpp)"
+    CATEGORY = "LLM Text Processor"
+    TITLE = "LLM Text Processor"
 
     def generate(
         self,
@@ -195,5 +195,5 @@ class QwenGGUF:
         return (response, reasoning_text, perf)
 
 
-NODE_CLASS_MAPPINGS = {"QwenGGUF": QwenGGUF}
-NODE_DISPLAY_NAME_MAPPINGS = {"QwenGGUF": "Qwen GGUF (llama.cpp)"}
+NODE_CLASS_MAPPINGS = {"LLMTextProcessor": LLMTextProcessor}
+NODE_DISPLAY_NAME_MAPPINGS = {"LLMTextProcessor": "LLM Text Processor"}

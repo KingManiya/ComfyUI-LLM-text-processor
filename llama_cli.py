@@ -37,7 +37,7 @@ def tensor_to_temp_png(image) -> Path:
         tensor = tensor[0]
     array = (tensor.detach().cpu().numpy() * 255).clip(0, 255).astype(np.uint8)
     pil_image = Image.fromarray(array)
-    fd, path = tempfile.mkstemp(prefix="qwen-gguf-", suffix=".png")
+    fd, path = tempfile.mkstemp(prefix="llm-text-processor-", suffix=".png")
     os.close(fd)
     pil_image.save(path, format="PNG")
     return Path(path)
@@ -52,7 +52,7 @@ def _write_temp_text_file(prefix: str, text: str) -> Path:
 
 
 def _write_prompt_file(prompt: str) -> Path:
-    return _write_temp_text_file("qwen-gguf-prompt-", prompt.strip() + PROMPT_PADDING)
+    return _write_temp_text_file("llm-text-processor-prompt-", prompt.strip() + PROMPT_PADDING)
 
 
 def split_extra_args(extra_args: str) -> list[str]:

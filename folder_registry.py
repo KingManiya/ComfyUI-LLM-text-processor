@@ -6,8 +6,8 @@ from pathlib import Path
 import folder_paths
 
 
-LLM_FOLDER = "qwen_gguf_llm"
-PROMPT_FOLDER = "qwen_gguf_prompts"
+LLM_FOLDER = "llm_text_processor_models"
+PROMPT_FOLDER = "llm_text_processor_prompts"
 NO_SYSTEM_PROMPT = "none"
 NO_MMPROJ = "none"
 NO_MODELS_FOUND = "No GGUF models found"

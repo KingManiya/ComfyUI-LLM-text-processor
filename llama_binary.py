@@ -57,13 +57,13 @@ def _platform_spec() -> PlatformSpec:
 
 
 def _json_get(url: str) -> dict:
-    request = urllib.request.Request(url, headers={"User-Agent": "ComfyUI-Qwen-gguf"})
+    request = urllib.request.Request(url, headers={"User-Agent": "ComfyUI-LLM-text-processor"})
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
 def _download(url: str, destination: Path) -> None:
-    request = urllib.request.Request(url, headers={"User-Agent": "ComfyUI-Qwen-gguf"})
+    request = urllib.request.Request(url, headers={"User-Agent": "ComfyUI-LLM-text-processor"})
     with urllib.request.urlopen(request, timeout=120) as response:
         with destination.open("wb") as handle:
             shutil.copyfileobj(response, handle)
@@ -125,11 +125,11 @@ def _existing_install(spec: PlatformSpec) -> LlamaCliPaths | None:
 
 
 def _extract_assets(assets: list[dict], install_dir: Path) -> None:
-    with TemporaryDirectory(prefix="qwen-llama-download-") as temp:
+    with TemporaryDirectory(prefix="llm-text-processor-llama-download-") as temp:
         temp_dir = Path(temp)
         for asset in assets:
             archive_path = temp_dir / asset["name"]
-            print(f"[Qwen GGUF] Downloading {asset['name']}...")
+            print(f"[LLM Text Processor] Downloading {asset['name']}...")
             _download(asset["browser_download_url"], archive_path)
             with zipfile.ZipFile(archive_path) as archive:
                 archive.extractall(install_dir)

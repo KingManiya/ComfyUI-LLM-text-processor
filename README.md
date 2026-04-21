@@ -1,78 +1,84 @@
-# ComfyUI Qwen GGUF
+# ComfyUI LLM Text Processor
 
-Run Qwen3-VL, Qwen3.5, and Qwen3.6 GGUF models in ComfyUI with llama.cpp.
+Run GGUF text and prompt processing workflows in ComfyUI with llama.cpp for
+Qwen3-VL, Qwen3.5, Qwen3.6, Gemma 4, gpt-oss, and other local LLMs.
 
-This extension adds a simple Qwen node for text and image workflows. It uses
-llama.cpp behind the scenes, discovers local GGUF models from
-`ComfyUI/models/LLM`, and keeps the ComfyUI workflow focused on the settings
-you usually need during generation.
+This extension adds a local LLM node for prompt writing, prompt rewriting,
+translation, captioning, extraction, and other text processing tasks inside
+ComfyUI. It discovers local GGUF models from `ComfyUI/models/LLM`, and it can
+also accept an image for multimodal models that use an external `mmproj`.
 
 ## Features
 
-- Qwen text generation with GGUF models
-- Optional image input for supported vision models
+- Text generation and text transformation with local GGUF models
+- Optional image input for multimodal llama.cpp models that use `mmproj`
 - Separate `RESPONSE` and `REASONING` outputs
 - System prompt presets from text files
 - Recursive model discovery from `ComfyUI/models/LLM`
 - Automatic llama.cpp setup on supported Windows systems
 - Advanced llama.cpp options for users who need them
 
-## Supported Models
+## Supported Model Families
 
-The node is intended for GGUF versions of these Qwen model families:
+Works with local GGUF models for Qwen, Gemma 4, gpt-oss, and other
+llama.cpp-compatible families.
 
-- Qwen3-VL: `Qwen3-VL-2B`, `Qwen3-VL-4B`, `Qwen3-VL-8B`,
-  `Qwen3-VL-30B-A3B`, `Qwen3-VL-32B`, `Qwen3-VL-235B-A22B`
-- Qwen3.5: `Qwen3.5-0.8B`, `Qwen3.5-2B`, `Qwen3.5-4B`, `Qwen3.5-9B`,
-  `Qwen3.5-27B`, `Qwen3.5-35B-A3B`, `Qwen3.5-122B-A10B`
-- Qwen3.6: `Qwen3.6-35B-A3B`
+Common examples:
 
-For image workflows, use a matching `mmproj` file from the same model family.
+- Qwen text and vision families such as `Qwen3-VL`, `Qwen3.5`, and `Qwen3.6`
+- Gemma 4 GGUF models such as `gemma-4-E2B`, `gemma-4-E4B`,
+  `gemma-4-26b-a4b`, and `gemma-4-31b`
+- OpenAI `gpt-oss-20b` and `gpt-oss-120b`
+
+Notes:
+
+- For image workflows, choose a matching `mmproj` file from the same model
+  family when the GGUF release provides one.
+- Gemma 4 text generation works well. Vision support depends on the specific
+  GGUF and `mmproj` release, and can be less reliable on some Windows CUDA
+  setups.
+- In this node, `gpt-oss` is used as a text model through
+  llama.cpp-compatible GGUF releases.
 
 ## Installation
 
 ### ComfyUI Manager
 
 Open ComfyUI Manager, choose `Install Custom Nodes`, search for
-`Qwen GGUF`, install it, then restart ComfyUI.
+`LLM Text Processor`, install it, then restart ComfyUI.
 
 ### Manual Git Clone
 
 Open a terminal in `ComfyUI/custom_nodes` and run:
 
 ```bash
-git clone https://github.com/KingManiya/ComfyUI-Qwen-gguf.git
+git clone https://github.com/KingManiya/ComfyUI-LLM-text-processor.git
 ```
 
 Restart ComfyUI. The node appears under:
 
 ```text
-Qwen GGUF -> Qwen GGUF (llama.cpp)
+LLM Text Processor -> LLM Text Processor
 ```
 
-No Python package install is required for the basic node. ComfyUI already ships
-with the runtime pieces used here. Pillow and NumPy are used when an image input
-is connected.
+No extra setup is needed for basic use.
 
 ## llama.cpp
 
-The node uses official llama.cpp release binaries. On supported systems, the
-required llama.cpp files are prepared automatically the first time you run the
-node.
-
-Current automatic setup target:
+The node uses official llama.cpp release binaries. Automatic setup is currently
+available on:
 
 ```text
 Windows x64 + CUDA 13
 ```
 
-Other platforms are not set up automatically yet.
+Other platforms require manual setup.
 
-The extension downloads llama.cpp only. It does not download Qwen model weights.
+The extension downloads llama.cpp only. It does not download model weights.
 
 ## Model Placement
 
-Put your Qwen GGUF files anywhere under:
+Put your GGUF files anywhere under:
 
 ```text
 ComfyUI/models/LLM
@@ -81,8 +87,8 @@ ComfyUI/models/LLM
 Example:
 
 ```text
-ComfyUI/models/LLM/My-Qwen-Model/model-q4_k_m.gguf
-ComfyUI/models/LLM/My-Qwen-Model/mmproj-BF16.gguf
+ComfyUI/models/LLM/My-Model/model-q4_k_m.gguf
+ComfyUI/models/LLM/My-Model/mmproj-bf16.gguf
 ```
 
 The `model` dropdown shows model `.gguf` files. The `mmproj` dropdown shows
@@ -110,8 +116,11 @@ Each top-level `.txt` file appears in the `system_prompt` dropdown. Choose
 
 ## Recommended Settings
 
-These values are based on official Qwen recommendations and mapped to the
-parameters available in this node.
+These presets are a good starting point for common models and tasks.
+
+### Qwen
+
+Qwen starting presets:
 
 | Model family / use case | `reasoning` | `temperature` | `top_p` | `top_k` | `repeat_penalty` |
 | --- | --- | ---: | ---: | ---: | ---: |
@@ -122,9 +131,62 @@ parameters available in this node.
 | Qwen3.5 / Qwen3.6 instruct, general tasks | `off` | 0.7 | 0.8 | 20 | 1.0 |
 | Qwen3.5 / Qwen3.6 instruct, reasoning tasks | `off` | 1.0 | 1.0 | 40 | 1.0 |
 
-Some Qwen recommendations also mention `min_p` and `presence_penalty`. They are
-not regular node inputs yet. Leave `extra_args` empty unless you already know
-which additional llama.cpp options your model needs.
+Reference: [Qwen3 docs](https://github.com/QwenLM/Qwen3/blob/main/docs/source/getting_started/quickstart.md)
+
+### Gemma 4
+
+Gemma 4 starting preset:
+
+| Model family / use case | `reasoning` | `temperature` | `top_p` | `top_k` | `repeat_penalty` |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Gemma 4 `it` models, general tasks | `off` | 1.0 | 0.95 | 64 | 1.0 |
+| Gemma 4 `it` models, reasoning tasks | `on` | 1.0 | 0.95 | 64 | 1.0 |
+| Gemma 4 multimodal tasks | `off` | 1.0 | 0.95 | 64 | 1.0 |
+
+Common Gemma 4 variants:
+
+- `gemma-4-E2B`
+- `gemma-4-E4B`
+- `gemma-4-26b-a4b`
+- `gemma-4-31b`
+
+Gemma 4 supports configurable thinking modes across the family. For simple
+prompt writing, translation, captioning, and extraction, start with
+`reasoning=off`. For harder reasoning or coding tasks, try `reasoning=on`.
+
+Reference:
+
+- [Gemma 4 model overview](https://ai.google.dev/gemma/docs/core)
+- [Gemma 4 E4B model card](https://huggingface.co/google/gemma-4-E4B)
+
+### gpt-oss
+
+gpt-oss starting preset:
+
+| Model family / use case | `reasoning` | `temperature` | `top_p` | `top_k` | `repeat_penalty` |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `gpt-oss-20b`, direct answers and lower-latency local tasks | `off` | 1.0 | 1.0 | 20 | 1.0 |
+| `gpt-oss-20b`, reasoning-heavy tasks | `on` | 1.0 | 1.0 | 20 | 1.0 |
+| `gpt-oss-120b`, general purpose and stronger reasoning | `on` | 1.0 | 1.0 | 20 | 1.0 |
+
+Use the preset as shown. Leave the other values at default unless you already
+know you want different sampling.
+
+Common gpt-oss variants:
+
+- `gpt-oss-20b`
+- `gpt-oss-120b`
+
+OpenAI describes `gpt-oss-20b` as the lower-latency option for local or
+specialized use cases, and `gpt-oss-120b` as the larger option for production,
+general purpose, and higher-reasoning workloads.
+
+OpenAI also documents configurable reasoning effort for `gpt-oss`. This node
+does not expose the native low / medium / high control directly, so the presets
+above use the simpler `reasoning` toggle available here: start with `off` for
+direct answers, and try `on` for harder reasoning tasks.
+
+Reference: [gpt-oss docs](https://github.com/openai/gpt-oss)
 
 ## Node Inputs
 
@@ -133,7 +195,7 @@ which additional llama.cpp options your model needs.
 | `model` | GGUF model file from `ComfyUI/models/LLM`. |
 | `mmproj` | Vision projector GGUF. Required when using image input. |
 | `system_prompt` | Prompt preset from `models/LLM/prompts`, or `none`. |
-| `prompt` | User prompt sent to the model. |
+| `prompt` | User prompt sent to the selected model. |
 | `max_tokens` | Maximum generated tokens. |
 | `temperature` | Sampling temperature. Lower values are more deterministic. |
 | `top_p` | Nucleus sampling threshold. |
@@ -148,8 +210,6 @@ which additional llama.cpp options your model needs.
 | `reasoning` | Reasoning output mode: `auto`, `on`, or `off`. |
 | `image` | Optional ComfyUI image input. Uses the first image in a batch. |
 | `extra_args` | Optional advanced llama.cpp parameters. Leave empty for normal use. |
-
-Every input includes an in-node tooltip.
 
 ## Node Outputs
 
@@ -186,12 +246,8 @@ Automatic llama.cpp setup currently supports Windows x64 CUDA 13 only.
 
 ### Out of memory
 
-Reduce `ctx_size` first. The context window reserves memory for the model's
-working context, so a large value can use a lot of memory even when the current
-prompt is short.
-
-If memory is still tight, use a smaller GGUF model, a smaller quant, or adjust
-the advanced memory placement settings.
+Lower `ctx_size` first. If that is not enough, use a smaller model, a smaller
+quant, or adjust memory placement.
 
 ### Generation takes too long
 
@@ -211,4 +267,6 @@ reasoning before it reaches the final answer.
 
 - [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
 - [llama.cpp](https://github.com/ggml-org/llama.cpp)
-- [Qwen](https://github.com/QwenLM)
+- [Qwen](https://github.com/QwenLM/Qwen3)
+- [Gemma](https://ai.google.dev/gemma/docs)
+- [gpt-oss](https://github.com/openai/gpt-oss)
