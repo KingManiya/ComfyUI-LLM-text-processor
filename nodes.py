@@ -147,6 +147,29 @@ class LLMTextProcessor:
     CATEGORY = "LLM Text Processor"
     TITLE = "LLM Text Processor"
 
+    @classmethod
+    def VALIDATE_INPUTS(
+        cls,
+        model,
+        mmproj,
+        system_prompt,
+        enable_processing=True,
+        **kwargs,
+    ):
+        if not enable_processing:
+            return True
+
+        if model not in model_options():
+            return f"Model not found: {model}"
+
+        if mmproj not in mmproj_options():
+            return f"mmproj not found: {mmproj}"
+
+        if system_prompt not in system_prompt_options():
+            return f"System prompt preset not found: {system_prompt}"
+
+        return True
+
     def generate(
         self,
         model: str,
