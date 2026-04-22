@@ -153,21 +153,7 @@ class LLMTextProcessor:
         model,
         mmproj,
         system_prompt,
-        enable_processing=True,
-        **kwargs,
     ):
-        if not enable_processing:
-            return True
-
-        if model not in model_options():
-            return f"Model not found: {model}"
-
-        if mmproj not in mmproj_options():
-            return f"mmproj not found: {mmproj}"
-
-        if system_prompt not in system_prompt_options():
-            return f"System prompt preset not found: {system_prompt}"
-
         return True
 
     def generate(
@@ -194,6 +180,19 @@ class LLMTextProcessor:
     ):
         if not enable_processing:
             return (prompt, "", "")
+
+        current_models = model_options()
+        current_mmprojs = mmproj_options()
+        current_system_prompts = system_prompt_options()
+
+        if model not in current_models:
+            raise ValueError(f"Model not found: {model}")
+
+        if mmproj not in current_mmprojs:
+            raise ValueError(f"mmproj not found: {mmproj}")
+
+        if system_prompt not in current_system_prompts:
+            raise ValueError(f"System prompt preset not found: {system_prompt}")
 
         model_path = full_model_path(model)
         mmproj_path = full_mmproj_path(mmproj)
