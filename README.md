@@ -18,6 +18,7 @@ also accept an image for multimodal models that use an external `mmproj`.
 - System prompt presets from text files
 - Recursive model discovery from `ComfyUI/models/LLM`
 - Automatic llama.cpp setup on supported Windows systems
+- Download progress logs during automatic llama.cpp setup
 - Advanced llama.cpp options for users who need them
 - Optional `enable_processing` toggle for switching between node processing and direct passthrough
 
@@ -81,6 +82,10 @@ Windows x64 + CUDA 13
 Other platforms require manual setup.
 
 The extension downloads llama.cpp only. It does not download model weights.
+
+During automatic setup, the console shows download progress, total size when
+available, and current download speed so slow connections do not look like a
+freeze.
 
 ## Model Placement
 

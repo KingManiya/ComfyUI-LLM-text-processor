@@ -3,7 +3,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import platform
-import shutil
+import time
 import urllib.request
 import zipfile
 from dataclasses import dataclass
@@ -62,11 +62,69 @@ def _json_get(url: str) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
+def _format_size(num_bytes: float) -> str:
+    units = ("B", "KB", "MB", "GB")
+    value = float(num_bytes)
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(value)} {unit}"
+            return f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} GB"
+
+
 def _download(url: str, destination: Path) -> None:
     request = urllib.request.Request(url, headers={"User-Agent": "ComfyUI-LLM-text-processor"})
     with urllib.request.urlopen(request, timeout=120) as response:
+        total_size = response.headers.get("Content-Length")
+        total_size = int(total_size) if total_size is not None else None
+        downloaded = 0
+        chunk_size = 1024 * 256
+        started_at = time.monotonic()
+        last_reported_at = started_at
+
         with destination.open("wb") as handle:
-            shutil.copyfileobj(response, handle)
+            while True:
+                chunk = response.read(chunk_size)
+                if not chunk:
+                    break
+                handle.write(chunk)
+                downloaded += len(chunk)
+
+                now = time.monotonic()
+                if now - last_reported_at < 1.0:
+                    continue
+
+                elapsed = max(now - started_at, 0.001)
+                speed = downloaded / elapsed
+                if total_size:
+                    percent = (downloaded / total_size) * 100
+                    print(
+                        "[LLM Text Processor] "
+                        f"Downloaded {_format_size(downloaded)} / {_format_size(total_size)} "
+                        f"({percent:.1f}%) at {_format_size(speed)}/s"
+                    )
+                else:
+                    print(
+                        "[LLM Text Processor] "
+                        f"Downloaded {_format_size(downloaded)} at {_format_size(speed)}/s"
+                    )
+                last_reported_at = now
+
+        elapsed = max(time.monotonic() - started_at, 0.001)
+        speed = downloaded / elapsed
+        if total_size:
+            print(
+                "[LLM Text Processor] "
+                f"Finished download: {_format_size(downloaded)} / {_format_size(total_size)} "
+                f"(100.0%) at {_format_size(speed)}/s"
+            )
+        else:
+            print(
+                "[LLM Text Processor] "
+                f"Finished download: {_format_size(downloaded)} at {_format_size(speed)}/s"
+            )
 
 
 def _select_assets(release: dict, spec: PlatformSpec) -> list[dict]:
