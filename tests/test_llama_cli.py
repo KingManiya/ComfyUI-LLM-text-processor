@@ -59,6 +59,23 @@ class ParseResponseTests(unittest.TestCase):
         self.assertEqual(reasoning, "")
         self.assertEqual(perf, "[ Prompt: 12.34 toks/s | Generation: 56.78 toks/s ]")
 
+    def test_keeps_generated_text_when_stdout_is_empty(self) -> None:
+        stdout = ""
+        stderr = "\n".join(
+            [
+                "load_backend: loaded Vulkan backend from /tmp/libggml-vulkan.so",
+                "llama_memory_breakdown_print: | memory breakdown [MiB] |",
+                "A concise generated prompt.",
+                "[ Prompt: 12.34 toks/s | Generation: 56.78 toks/s ]",
+            ]
+        )
+
+        response, reasoning, perf = self.llama_cli._parse_response(stdout, stderr)
+
+        self.assertEqual(response, "A concise generated prompt.")
+        self.assertEqual(reasoning, "")
+        self.assertEqual(perf, "[ Prompt: 12.34 toks/s | Generation: 56.78 toks/s ]")
+
     def test_keeps_thinking_split_when_logs_are_in_stderr(self) -> None:
         stdout = "[Start thinking]scratchpad[End thinking]final answer"
         stderr = "load_backend: loaded Vulkan backend from /tmp/libggml-vulkan.so"

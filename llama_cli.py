@@ -16,6 +16,20 @@ from .llama_binary import ensure_llama_cli_paths
 PROMPT_ECHO_END = "... (truncated)"
 PROMPT_PADDING = " " * 501
 PERF_RE = re.compile(r"\[\s*Prompt:\s*[^|\]]+\|\s*Generation:\s*[^\]]+\]")
+LLAMA_LOG_LINE_RE = re.compile(
+    r"^(?:"
+    r"load_backend|"
+    r"llama_[A-Za-z0-9_]+|"
+    r"ggml_[A-Za-z0-9_]+|"
+    r"common_[A-Za-z0-9_]+|"
+    r"mtmd_[A-Za-z0-9_]+|"
+    r"clip_[A-Za-z0-9_]+|"
+    r"build|"
+    r"main|"
+    r"system_info|"
+    r"sampler"
+    r")\s*:",
+)
 MMPROJ_EMBEDDING_MISMATCH_RE = re.compile(
     r"mismatch between text model \(n_embd = (?P<model>\d+)\) and mmproj \(n_embd = (?P<mmproj>\d+)\)",
     flags=re.IGNORECASE,
@@ -211,11 +225,11 @@ def _communicate_with_interrupt(process: subprocess.Popen, timeout_seconds: int)
 
 
 def _parse_response(stdout: str, stderr: str = "") -> tuple[str, str, str]:
-    text = str(stdout or "")
+    text = _remove_llama_diagnostics("\n".join(part for part in (stdout, stderr) if part))
     if PROMPT_ECHO_END in text:
         text = text.split(PROMPT_ECHO_END, 1)[1]
 
-    perf_text = text + "\n" + str(stderr or "")
+    perf_text = "\n".join(part for part in (stdout, stderr) if part)
     perf_match = PERF_RE.search(perf_text)
     perf = perf_match.group(0).strip() if perf_match else ""
     content_match = PERF_RE.search(text)
@@ -230,6 +244,21 @@ def _parse_response(stdout: str, stderr: str = "") -> tuple[str, str, str]:
 
     thinking, response = thinking_text.split(END_THINKING, 1)
     return response.strip(), thinking.strip(), perf
+
+
+def _remove_llama_diagnostics(text: str) -> str:
+    content_lines = []
+    for line in str(text or "").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            content_lines.append(line)
+            continue
+        if PERF_RE.search(stripped):
+            continue
+        if LLAMA_LOG_LINE_RE.match(stripped):
+            continue
+        content_lines.append(line)
+    return "\n".join(content_lines).strip()
 
 
 def _parse_llama_error(stderr: str) -> str:
