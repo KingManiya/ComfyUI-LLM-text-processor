@@ -178,7 +178,7 @@ def run_llama_cli(
         raise RuntimeError(
             f"llama.cpp inference failed with exit code {result.returncode}:\n{stderr}"
         )
-    return _parse_response(result.stdout + "\n" + result.stderr)
+    return _parse_response(result.stdout, result.stderr)
 
 
 def _stop_process(process: subprocess.Popen) -> None:
@@ -210,14 +210,16 @@ def _communicate_with_interrupt(process: subprocess.Popen, timeout_seconds: int)
             continue
 
 
-def _parse_response(text: str) -> tuple[str, str, str]:
-    text = str(text or "")
+def _parse_response(stdout: str, stderr: str = "") -> tuple[str, str, str]:
+    text = str(stdout or "")
     if PROMPT_ECHO_END in text:
         text = text.split(PROMPT_ECHO_END, 1)[1]
 
-    perf_match = PERF_RE.search(text)
+    perf_text = text + "\n" + str(stderr or "")
+    perf_match = PERF_RE.search(perf_text)
     perf = perf_match.group(0).strip() if perf_match else ""
-    content = text[:perf_match.start()] if perf_match else text
+    content_match = PERF_RE.search(text)
+    content = text[:content_match.start()] if content_match else text
     content = content.strip()
     if not content.startswith(START_THINKING):
         return content, "", perf
