@@ -145,10 +145,12 @@ class InstallDiscoveryTests(unittest.TestCase):
             cli.write_text("binary")
             cli.chmod(0o644)
 
-            paths = llama_binary._find_cli_paths(install_dir, llama_binary.UBUNTU_X64_CPU)
+            with mock.patch.object(llama_binary.os, "name", "posix"):
+                with mock.patch.object(Path, "chmod", autospec=True, wraps=Path.chmod) as chmod_mock:
+                    paths = llama_binary._find_cli_paths(install_dir, llama_binary.UBUNTU_X64_CPU)
 
             self.assertEqual(paths, llama_binary.LlamaCliPaths(cli=cli))
-            self.assertTrue(os.access(cli, os.X_OK))
+            self.assertTrue(any(call.args[0] == cli for call in chmod_mock.call_args_list))
 
 
 class LinuxCommandTests(unittest.TestCase):
