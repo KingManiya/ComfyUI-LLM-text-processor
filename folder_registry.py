@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import os
@@ -29,8 +30,39 @@ def register_folders() -> None:
     # register the custom keys directly with the same tuple shape ComfyUI uses.
     llm_dir.mkdir(parents=True, exist_ok=True)
     prompts_dir.mkdir(parents=True, exist_ok=True)
-    folder_paths.folder_names_and_paths[LLM_FOLDER] = ([str(llm_dir)], {".gguf"})
-    folder_paths.folder_names_and_paths[PROMPT_FOLDER] = ([str(prompts_dir)], {".txt"})
+
+    # Get all directories registered under ComfyUI's existing LLM key,
+    # including directories registered by custom node extensions.
+    llm_dirs = list(folder_paths.get_folder_paths("LLM"))
+
+    # Ensure the default ComfyUI LLM directory is included.
+    default_llm_dir = str(llm_dir)
+    if default_llm_dir not in llm_dirs:
+        llm_dirs.insert(0, default_llm_dir)
+
+    # Remove duplicate directories while preserving search order.
+    unique_llm_dirs = []
+    seen = set()
+    for path in llm_dirs:
+        key = os.path.normcase(os.path.abspath(path))
+        if key not in seen:
+            seen.add(key)
+            unique_llm_dirs.append(path)
+    llm_dirs = unique_llm_dirs
+
+    # Look for prompts under each registered LLM directory.
+    prompt_dirs = [
+        str(Path(path) / "prompts")
+        for path in llm_dirs
+    ]
+
+    # Ensure the default prompts directory is included.
+    default_prompts_dir = str(prompts_dir)
+    if default_prompts_dir not in prompt_dirs:
+        prompt_dirs.insert(0, default_prompts_dir)
+
+    folder_paths.folder_names_and_paths[LLM_FOLDER] = (llm_dirs, {".gguf"})
+    folder_paths.folder_names_and_paths[PROMPT_FOLDER] = (prompt_dirs, {".txt"})
 
 
 def model_options() -> list[str]:
