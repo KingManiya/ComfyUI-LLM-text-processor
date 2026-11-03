@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+
+import comfy.model_management
+
 from .folder_registry import (
     NO_MMPROJ,
     full_mmproj_path,
@@ -85,21 +89,20 @@ class LLMTextProcessor:
                     "gpu_and_cpu_moe_layers",
                 ], {
                     "default": "auto",
-                    "tooltip": "Advanced memory placement mode: auto, gpu_layers, cpu_moe_layers, or gpu_and_cpu_moe_layers.",
-                    "advanced": True,
+                    "tooltip": "Memory strategy for llama-cli. 'auto' uses llama.cpp defaults (CPU-only, no -ngl passed). Select 'gpu_layers' to offload dense models to GPU, or 'cpu_moe_layers' for MoE models (offload dense/attention to GPU, keep MoE experts on CPU).",
                 }),
                 "n_gpu_layers": ("INT", {
                     "default": 99,
                     "min": -1,
                     "max": 999,
-                    "tooltip": "Used only in gpu_layers and gpu_and_cpu_moe_layers modes. Number of model layers to place on the GPU.",
+                    "tooltip": "Number of model layers to offload to GPU. -1 or 99 offloads all supported layers.",
                     "advanced": True,
                 }),
                 "n_cpu_moe_layers": ("INT", {
-                    "default": 1,
-                    "min": 1,
+                    "default": 99,
+                    "min": 0,
                     "max": 999,
-                    "tooltip": "Used only in cpu_moe_layers and gpu_and_cpu_moe_layers modes. Number of MoE layers to keep on the CPU.",
+                    "tooltip": "Number of MoE layers to keep on CPU when in cpu_moe_layers or gpu_and_cpu_moe_layers mode. 99 (or max) keeps all MoE on CPU.",
                     "advanced": True,
                 }),
                 "seed": ("INT", {
@@ -156,7 +159,7 @@ class LLMTextProcessor:
     ):
         return True
 
-    def generate(
+    async def generate(
         self,
         model: str,
         mmproj: str,
@@ -218,7 +221,12 @@ class LLMTextProcessor:
             reasoning=reasoning,
             extra_args=parsed_extra_args,
         )
-        response, reasoning_text, perf = run_llama_cli(
+        # Free ComfyUI models from VRAM and empty cache so llama-cli has full GPU memory
+        comfy.model_management.unload_all_models()
+        comfy.model_management.soft_empty_cache()
+
+        response, reasoning_text, perf = await asyncio.to_thread(
+            run_llama_cli,
             command=command,
             timeout_seconds=timeout_seconds,
             cleanup_paths=cleanup_paths,
