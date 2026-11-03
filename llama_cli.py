@@ -5,6 +5,7 @@ import re
 import shlex
 import subprocess
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -116,15 +117,20 @@ def build_command(
         "-c", str(ctx_size),
         "--seed", str(normalize_llama_seed(seed)),
         "--single-turn",
+        "--no-warmup",
         "--reasoning", reasoning,
     ]
 
     # In auto mode llama.cpp receives neither flag and uses its own placement
     # defaults. Other modes pass only the user-selected memory controls.
-    if memory_mode in {"gpu_layers", "gpu_and_cpu_moe_layers"}:
+    if memory_mode in {"gpu_layers", "cpu_moe_layers", "gpu_and_cpu_moe_layers"}:
         command.extend(["-ngl", str(n_gpu_layers)])
+
     if memory_mode in {"cpu_moe_layers", "gpu_and_cpu_moe_layers"}:
-        command.extend(["--n-cpu-moe", str(n_cpu_moe_layers)])
+        if n_cpu_moe_layers >= 99 or n_cpu_moe_layers == -1:
+            command.append("--cpu-moe")
+        elif n_cpu_moe_layers > 0:
+            command.extend(["--n-cpu-moe", str(n_cpu_moe_layers)])
 
     if system_prompt_path is not None:
         command.extend(["-sysf", str(system_prompt_path)])
@@ -140,11 +146,27 @@ def build_command(
     return command, tuple(cleanup_paths)
 
 
+def _drain_stream(stream, chunks: list[str], print_prefix: str | None = None) -> None:
+    try:
+        for line in iter(stream.readline, ""):
+            chunks.append(line)
+            if print_prefix is not None:
+                print(f"{print_prefix}{line}", end="", flush=True)
+    finally:
+        try:
+            stream.close()
+        except OSError:
+            pass
+
+
 def run_llama_cli(
     command: list[str],
     timeout_seconds: int,
     cleanup_paths: tuple[Path | None, ...] = (),
 ) -> tuple[str, str, str]:
+    print(f"[LLM Text Processor] Executing: {' '.join(shlex.quote(c) for c in command)}")
+    if "-ngl" not in command:
+        print("[LLM Text Processor] Notice: Running on CPU (-ngl flag omitted). Set memory_mode to 'gpu_layers' or 'cpu_moe_layers' on the node to enable GPU offloading.")
     process = None
     try:
         process = subprocess.Popen(
@@ -193,21 +215,43 @@ def _stop_process(process: subprocess.Popen) -> None:
 
 
 def _communicate_with_interrupt(process: subprocess.Popen, timeout_seconds: int) -> tuple[str, str]:
+    stdout_chunks: list[str] = []
+    stderr_chunks: list[str] = []
+
+    stdout_thread = threading.Thread(
+        target=_drain_stream,
+        args=(process.stdout, stdout_chunks, None),
+        daemon=True,
+    )
+    stderr_thread = threading.Thread(
+        target=_drain_stream,
+        args=(process.stderr, stderr_chunks, "[LLM Text Processor] "),
+        daemon=True,
+    )
+
+    stdout_thread.start()
+    stderr_thread.start()
+
     deadline = time.monotonic() + timeout_seconds
-    while True:
+    while process.poll() is None:
         if comfy.model_management.processing_interrupted():
             _stop_process(process)
-            # Reset the global interrupt flag and raise the exact exception
-            # ComfyUI expects so the UI reports this as an interruption.
+            stdout_thread.join(timeout=1.0)
+            stderr_thread.join(timeout=1.0)
             comfy.model_management.throw_exception_if_processing_interrupted()
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
+
+        if time.monotonic() >= deadline:
             _stop_process(process)
+            stdout_thread.join(timeout=1.0)
+            stderr_thread.join(timeout=1.0)
             raise TimeoutError(f"llama.cpp timed out after {timeout_seconds}s")
-        try:
-            return process.communicate(timeout=min(0.1, remaining))
-        except subprocess.TimeoutExpired:
-            continue
+
+        time.sleep(0.05)
+
+    stdout_thread.join(timeout=2.0)
+    stderr_thread.join(timeout=2.0)
+
+    return "".join(stdout_chunks), "".join(stderr_chunks)
 
 
 def _parse_response(text: str) -> tuple[str, str, str]:
