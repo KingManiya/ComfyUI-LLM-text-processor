@@ -81,7 +81,13 @@ available on:
 Windows x64 + CUDA 13
 ```
 
-Other platforms require manual setup.
+Other platforms require manual setup. To use a local llama.cpp build:
+
+- Set `LLAMA_CLI_PATH` (or `LLAMA_CPP_PATH`) in your environment or in a `.env`
+  file in the node folder. You can point to `llama-cli`, to a directory containing
+  it, or to `llama-server` (the node will automatically resolve the sibling `llama-cli`).
+- Or make `llama-cli` available on your system `PATH`.
+- Or place `llama-cli` in `ComfyUI-LLM-text-processor/bin`.
 
 The extension downloads llama.cpp only. It does not download model weights.
 

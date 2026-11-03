@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import os
 import platform
+import shutil
 import time
 import urllib.request
 import zipfile
@@ -189,8 +191,131 @@ def _extract_assets(assets: list[dict], install_dir: Path) -> None:
                 archive.extractall(install_dir)
 
 
+ENV_CONFIG_VARS = (
+    "LLAMA_CLI_PATH",
+    "LLAMA_INTEGRATION_CLI",
+    "LLAMA_SERVER_PATH",
+    "LLAMA_BIN_DIR",
+    "LLAMA_CPP_PATH",
+)
+
+
+def _read_env_file(path: Path) -> dict[str, str]:
+    if not path.is_file():
+        return {}
+    values: dict[str, str] = {}
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            key, separator, value = line.strip().partition("=")
+            if separator and key and not key.startswith("#"):
+                values[key.strip()] = value.strip().strip("\"'")
+    except OSError:
+        pass
+    return values
+
+
+def _is_executable(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    if platform.system().lower() == "windows":
+        return True
+    return os.access(path, os.X_OK)
+
+
+def _resolve_cli_path(candidate: Path | str | None) -> Path | None:
+    if not candidate:
+        return None
+    candidate_str = os.path.expandvars(os.path.expanduser(str(candidate).strip()))
+    if not candidate_str:
+        return None
+    path = Path(candidate_str)
+    try:
+        path = path.resolve()
+    except OSError:
+        pass
+    if not path.exists():
+        return None
+
+    cli_names = (
+        ("llama-cli.exe", "llama-cli")
+        if platform.system().lower() == "windows"
+        else ("llama-cli", "llama-cli.exe")
+    )
+
+    if path.is_dir():
+        for name in cli_names:
+            target = path / name
+            if _is_executable(target):
+                return target
+            target_bin = path / "bin" / name
+            if _is_executable(target_bin):
+                return target_bin
+        return None
+
+    if path.name.lower() in {"llama-cli", "llama-cli.exe"}:
+        return path if _is_executable(path) else None
+
+    # If file is llama-server: inspect sibling for llama-cli. Strictly do NOT return llama-server.
+    if path.name.lower() in {"llama-server", "llama-server.exe"}:
+        for name in cli_names:
+            sibling = path.parent / name
+            if _is_executable(sibling):
+                return sibling
+        return None
+
+    # Any other directly specified executable file (e.g. custom wrapper or renamed cli)
+    if _is_executable(path):
+        return path
+
+    return None
+
+
+def _find_custom_cli() -> Path | None:
+    env_file_values: dict[str, str] = {}
+    for env_path in (PACKAGE_ROOT / ".env", PACKAGE_ROOT / "tests" / ".env"):
+        if env_path.is_file():
+            env_file_values = _read_env_file(env_path)
+            if env_file_values:
+                break
+
+    for var in ENV_CONFIG_VARS:
+        val = os.environ.get(var) or env_file_values.get(var)
+        resolved = _resolve_cli_path(val)
+        if resolved is not None:
+            return resolved
+
+    cli_which = shutil.which("llama-cli")
+    if cli_which:
+        resolved = _resolve_cli_path(cli_which)
+        if resolved is not None:
+            return resolved
+
+    server_which = shutil.which("llama-server")
+    if server_which:
+        resolved = _resolve_cli_path(server_which)
+        if resolved is not None:
+            return resolved
+
+    return _resolve_cli_path(PACKAGE_ROOT / "bin")
+
+
 def ensure_llama_cli_paths() -> LlamaCliPaths:
-    spec = _platform_spec()
+    custom_cli = _find_custom_cli()
+    if custom_cli is not None:
+        return LlamaCliPaths(cli=custom_cli)
+
+    try:
+        spec = _platform_spec()
+    except RuntimeError as err:
+        raise RuntimeError(
+            "No llama-cli executable found on this system.\n"
+            f"{err}\n"
+            "To use LLM Text Processor on Linux / macOS:\n"
+            "  1. Ensure 'llama-cli' is installed and available on your PATH, or\n"
+            "  2. Set LLAMA_CLI_PATH (or LLAMA_SERVER_PATH) in your environment or in a .env file "
+            "pointing to your llama-cli binary or directory."
+        ) from err
+
     existing = _existing_install(spec)
     if existing is not None:
         return existing
